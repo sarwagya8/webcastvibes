@@ -1,10 +1,11 @@
 <!doctype html>
 <html>
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+
 <title>WebCast Vibes</title>
 
-<script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
+<script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js"></script>
 
 <style>
 body {
@@ -33,173 +34,125 @@ input, button {
 <h2>WebCast Vibes</h2>
 
 <input id="url"
-value="https://samplelib.com/mp4/sample-5s.mp4"
-placeholder="Video URL">
+value="https://samplelib.com/mp4/sample-5s.mp4">
 
-<button onclick="connectCast()">
+<button onclick="castVideo()">
 Cast Video
 </button>
 
-<button onclick="resetCast()">
-Reset Cast
+<button onclick="disconnect()">
+Disconnect
 </button>
 
 <div id="status">
-Loading Cast...
+Loading...
 </div>
 
 
 <script>
 
-let context;
-let sessionReady = false;
+let session = null;
+let initialized = false;
 
 
-function log(msg){
-  console.log(msg);
-  document.getElementById("status").innerText = msg;
+function status(text){
+  document.getElementById("status").innerText=text;
 }
 
 
-window.__onGCastApiAvailable = function(available){
+window.__onGCastApiAvailable = function(isLoaded,error){
 
-  if(!available){
-    log("Cast SDK unavailable");
+  if(!isLoaded){
+    status("Cast SDK failed: "+error);
     return;
   }
 
 
-  context =
-    cast.framework.CastContext.getInstance();
+  const sessionRequest =
+    new chrome.cast.SessionRequest(
+      chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID
+    );
 
 
-  context.setOptions({
-
-    receiverApplicationId:
-      chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
-
-    autoJoinPolicy:
-      chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
-
-  });
+  const apiConfig =
+    new chrome.cast.ApiConfig(
+      sessionRequest,
+      onSessionCreated,
+      receiverListener
+    );
 
 
-  context.addEventListener(
-    cast.framework.CastContextEventType.SESSION_STATE_CHANGED,
-    function(event){
-
-      console.log(
-        "Session:",
-        event.sessionState
+  chrome.cast.initialize(
+    apiConfig,
+    function(){
+      initialized=true;
+      status("Cast ready");
+    },
+    function(error){
+      status(
+        "Init error: "+
+        JSON.stringify(error)
       );
-
-
-      if(
-        event.sessionState ===
-        cast.framework.SessionState.SESSION_STARTED
-        ||
-        event.sessionState ===
-        cast.framework.SessionState.SESSION_RESUMED
-      ){
-
-        sessionReady = true;
-
-        log(
-          "Chromecast connected. Loading video..."
-        );
-
-        sendVideo();
-
-      }
-
-
-      if(
-        event.sessionState ===
-        cast.framework.SessionState.SESSION_ENDED
-      ){
-
-        sessionReady=false;
-        log("Disconnected");
-
-      }
-
     }
   );
-
-
-  log("Cast ready");
 
 };
 
 
 
-function connectCast(){
+function receiverListener(availability){
 
-  if(!context){
-    log("Cast not ready yet");
-    return;
-  }
-
-
-  log(
-    "Opening Chromecast selector..."
+  console.log(
+    "Receiver:",
+    availability
   );
-
-
-  context.requestSession()
-  .then(function(){
-
-    console.log(
-      "requestSession complete"
-    );
-
-  })
-  .catch(function(error){
-
-    console.error(error);
-
-    log(
-      "Cast connection failed: "+
-      JSON.stringify(error)
-    );
-
-  });
-
-
-  setTimeout(function(){
-
-    if(!sessionReady){
-
-      log(
-        "No connection after 15 seconds. Try Reset."
-      );
-
-    }
-
-  },15000);
 
 }
 
 
 
+function castVideo(){
 
-function sendVideo(){
-
-  let session =
-    context.getCurrentSession();
-
-
-  if(!session){
-
-    log("No session found");
+  if(!initialized){
+    status("Cast not initialized");
     return;
-
   }
 
 
+  status(
+    "Opening Chromecast selector..."
+  );
+
+
+  chrome.cast.requestSession(
+    onSessionCreated,
+    function(error){
+
+      console.log(error);
+
+      status(
+        "Session error: "+
+        JSON.stringify(error)
+      );
+
+    }
+  );
+
+}
+
+
+
+function onSessionCreated(e){
+
+  session=e;
+
+  status(
+    "Connected. Loading video..."
+  );
+
+
   let url =
-    document.getElementById("url")
-    .value.trim();
+    document.getElementById("url").value.trim();
 
 
   let type =
@@ -217,10 +170,6 @@ function sendVideo(){
     );
 
 
-  mediaInfo.streamType =
-    chrome.cast.media.StreamType.BUFFERED;
-
-
   let request =
     new chrome.cast.media.LoadRequest(
       mediaInfo
@@ -230,47 +179,42 @@ function sendVideo(){
   request.autoplay=true;
 
 
-  session.loadMedia(request)
+  session.loadMedia(
+    request,
+    function(){
 
-  .then(function(){
+      status(
+        "Playing on Chromecast"
+      );
 
-    log(
-      "Playing on Chromecast"
-    );
+    },
+    function(error){
 
-  })
+      status(
+        "Media error: "+
+        JSON.stringify(error)
+      );
 
-  .catch(function(error){
-
-    console.error(error);
-
-    log(
-      "Media error: "+
-      JSON.stringify(error)
-    );
-
-  });
-
-}
-
-
-
-function resetCast(){
-
-  if(context){
-
-    context.endCurrentSession(true);
-
-  }
-
-  sessionReady=false;
-
-  log(
-    "Reset complete"
+    }
   );
 
 }
 
+
+
+function disconnect(){
+
+  if(session){
+
+    session.stop(
+      function(){
+        status("Disconnected");
+      }
+    );
+
+  }
+
+}
 
 </script>
 
