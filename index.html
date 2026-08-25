@@ -1,72 +1,75 @@
 <!doctype html>
 <html>
 <head>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>WebCast Vibes</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WebCast Vibes</title>
 
-  <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
+<script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
 
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      padding: 20px;
-      max-width: 600px;
-      margin: auto;
-    }
+<style>
+body {
+  font-family: Arial;
+  padding: 20px;
+}
 
-    input, button {
-      width: 100%;
-      padding: 14px;
-      margin: 8px 0;
-      font-size: 16px;
-      box-sizing: border-box;
-    }
+input, button {
+  width: 100%;
+  padding: 14px;
+  margin: 8px 0;
+  font-size: 16px;
+}
 
-    #status {
-      margin-top: 15px;
-      padding: 10px;
-      border: 1px solid #ccc;
-      min-height: 20px;
-    }
-  </style>
+#status {
+  margin-top:20px;
+  padding:10px;
+  border:1px solid #ccc;
+}
+</style>
+
 </head>
 
 <body>
 
 <h2>WebCast Vibes</h2>
 
-<input
-  id="url"
-  placeholder="Paste video URL (.mp4 or .m3u8)"
-  value="https://samplelib.com/mp4/sample-5s.mp4"
-/>
+<input id="url"
+value="https://samplelib.com/mp4/sample-5s.mp4"
+placeholder="Video URL">
 
-<button onclick="startCast()">
-  Cast Video
+<button onclick="connectCast()">
+Cast Video
+</button>
+
+<button onclick="resetCast()">
+Reset Cast
 </button>
 
 <div id="status">
-Initializing Cast...
+Loading Cast...
 </div>
 
 
 <script>
 
-let castSession = null;
+let context;
+let sessionReady = false;
 
 
-window.__onGCastApiAvailable = function(isAvailable) {
+function log(msg){
+  console.log(msg);
+  document.getElementById("status").innerText = msg;
+}
 
-  const status = document.getElementById("status");
 
-  if (!isAvailable) {
-    status.innerHTML =
-      "Cast SDK failed to load";
+window.__onGCastApiAvailable = function(available){
+
+  if(!available){
+    log("Cast SDK unavailable");
     return;
   }
 
 
-  const context =
+  context =
     cast.framework.CastContext.getInstance();
 
 
@@ -81,119 +84,190 @@ window.__onGCastApiAvailable = function(isAvailable) {
   });
 
 
-  status.innerHTML =
-    "Cast ready. Select device.";
+  context.addEventListener(
+    cast.framework.CastContextEventType.SESSION_STATE_CHANGED,
+    function(event){
+
+      console.log(
+        "Session:",
+        event.sessionState
+      );
+
+
+      if(
+        event.sessionState ===
+        cast.framework.SessionState.SESSION_STARTED
+        ||
+        event.sessionState ===
+        cast.framework.SessionState.SESSION_RESUMED
+      ){
+
+        sessionReady = true;
+
+        log(
+          "Chromecast connected. Loading video..."
+        );
+
+        sendVideo();
+
+      }
+
+
+      if(
+        event.sessionState ===
+        cast.framework.SessionState.SESSION_ENDED
+      ){
+
+        sessionReady=false;
+        log("Disconnected");
+
+      }
+
+    }
+  );
+
+
+  log("Cast ready");
 
 };
 
 
 
-async function startCast() {
+function connectCast(){
 
-  const status =
-    document.getElementById("status");
-
-  const url =
-    document.getElementById("url").value.trim();
-
-
-  if (!url) {
-
-    status.innerHTML =
-      "Please enter a URL";
-
+  if(!context){
+    log("Cast not ready yet");
     return;
   }
 
 
-  try {
-
-    status.innerHTML =
-      "Opening Chromecast selector...";
-
-
-    const context =
-      cast.framework.CastContext.getInstance();
+  log(
+    "Opening Chromecast selector..."
+  );
 
 
-    await context.requestSession();
+  context.requestSession()
+  .then(function(){
 
-
-    castSession =
-      context.getCurrentSession();
-
-
-    if (!castSession) {
-
-      throw new Error(
-        "No Chromecast session"
-      );
-
-    }
-
-
-    status.innerHTML =
-      "Connected. Sending video...";
-
-
-    let contentType =
-      "video/mp4";
-
-
-    if (
-      url.includes(".m3u8")
-    ) {
-
-      contentType =
-        "application/x-mpegurl";
-
-    }
-
-
-
-    const mediaInfo =
-      new chrome.cast.media.MediaInfo(
-        url,
-        contentType
-      );
-
-
-    mediaInfo.streamType =
-      chrome.cast.media.StreamType.BUFFERED;
-
-
-
-    const request =
-      new chrome.cast.media.LoadRequest(
-        mediaInfo
-      );
-
-
-    request.autoplay = true;
-
-
-
-    await castSession.loadMedia(
-      request
+    console.log(
+      "requestSession complete"
     );
 
-
-    status.innerHTML =
-      "Video sent to Chromecast";
-
-
-  } catch(error) {
-
+  })
+  .catch(function(error){
 
     console.error(error);
 
+    log(
+      "Cast connection failed: "+
+      JSON.stringify(error)
+    );
 
-    status.innerHTML =
-      "Error: " +
-      JSON.stringify(error);
+  });
 
+
+  setTimeout(function(){
+
+    if(!sessionReady){
+
+      log(
+        "No connection after 15 seconds. Try Reset."
+      );
+
+    }
+
+  },15000);
+
+}
+
+
+
+
+function sendVideo(){
+
+  let session =
+    context.getCurrentSession();
+
+
+  if(!session){
+
+    log("No session found");
+    return;
 
   }
+
+
+  let url =
+    document.getElementById("url")
+    .value.trim();
+
+
+  let type =
+    url.includes(".m3u8")
+    ?
+    "application/x-mpegurl"
+    :
+    "video/mp4";
+
+
+  let mediaInfo =
+    new chrome.cast.media.MediaInfo(
+      url,
+      type
+    );
+
+
+  mediaInfo.streamType =
+    chrome.cast.media.StreamType.BUFFERED;
+
+
+  let request =
+    new chrome.cast.media.LoadRequest(
+      mediaInfo
+    );
+
+
+  request.autoplay=true;
+
+
+  session.loadMedia(request)
+
+  .then(function(){
+
+    log(
+      "Playing on Chromecast"
+    );
+
+  })
+
+  .catch(function(error){
+
+    console.error(error);
+
+    log(
+      "Media error: "+
+      JSON.stringify(error)
+    );
+
+  });
+
+}
+
+
+
+function resetCast(){
+
+  if(context){
+
+    context.endCurrentSession(true);
+
+  }
+
+  sessionReady=false;
+
+  log(
+    "Reset complete"
+  );
 
 }
 
