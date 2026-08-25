@@ -1,64 +1,204 @@
 <!doctype html>
 <html>
 <head>
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Quick Video Caster v2</title>
-<script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
-<style>
-body{font-family:sans-serif;padding:20px}
-input,button{width:100%;padding:14px;margin:8px 0;font-size:16px}
-#status{margin-top:15px}
-</style>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WebCast Vibes</title>
+
+  <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      max-width: 600px;
+      margin: auto;
+    }
+
+    input, button {
+      width: 100%;
+      padding: 14px;
+      margin: 8px 0;
+      font-size: 16px;
+      box-sizing: border-box;
+    }
+
+    #status {
+      margin-top: 15px;
+      padding: 10px;
+      border: 1px solid #ccc;
+      min-height: 20px;
+    }
+  </style>
 </head>
+
 <body>
-<h2>Quick Video Caster v2</h2>
-<input id="url" placeholder="Paste .m3u8 or .mp4 URL">
-<button onclick="startCast()">Cast</button>
-<div id="status"></div>
+
+<h2>WebCast Vibes</h2>
+
+<input
+  id="url"
+  placeholder="Paste video URL (.mp4 or .m3u8)"
+  value="https://samplelib.com/mp4/sample-5s.mp4"
+/>
+
+<button onclick="startCast()">
+  Cast Video
+</button>
+
+<div id="status">
+Initializing Cast...
+</div>
+
 
 <script>
-let castSession;
 
-window.__onGCastApiAvailable=function(available){
-  if(available){
-    const ctx=cast.framework.CastContext.getInstance();
-    ctx.setOptions({
-      receiverApplicationId: chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
-      autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
-    });
-    document.getElementById("status").innerText="Cast ready";
-  }
-};
+let castSession = null;
 
-function startCast(){
-  const url=document.getElementById("url").value.trim();
-  const status=document.getElementById("status");
 
-  if(!url){
-    status.innerText="Enter a video URL";
+window.__onGCastApiAvailable = function(isAvailable) {
+
+  const status = document.getElementById("status");
+
+  if (!isAvailable) {
+    status.innerHTML =
+      "Cast SDK failed to load";
     return;
   }
 
-  const ctx=cast.framework.CastContext.getInstance();
 
-  ctx.requestSession().then(()=>{
-    castSession=ctx.getCurrentSession();
+  const context =
+    cast.framework.CastContext.getInstance();
 
-    let type=url.includes(".m3u8") ?
-      "application/x-mpegurl" :
+
+  context.setOptions({
+
+    receiverApplicationId:
+      chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
+
+    autoJoinPolicy:
+      chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
+
+  });
+
+
+  status.innerHTML =
+    "Cast ready. Select device.";
+
+};
+
+
+
+async function startCast() {
+
+  const status =
+    document.getElementById("status");
+
+  const url =
+    document.getElementById("url").value.trim();
+
+
+  if (!url) {
+
+    status.innerHTML =
+      "Please enter a URL";
+
+    return;
+  }
+
+
+  try {
+
+    status.innerHTML =
+      "Opening Chromecast selector...";
+
+
+    const context =
+      cast.framework.CastContext.getInstance();
+
+
+    await context.requestSession();
+
+
+    castSession =
+      context.getCurrentSession();
+
+
+    if (!castSession) {
+
+      throw new Error(
+        "No Chromecast session"
+      );
+
+    }
+
+
+    status.innerHTML =
+      "Connected. Sending video...";
+
+
+    let contentType =
       "video/mp4";
 
-    const mediaInfo=new chrome.cast.media.MediaInfo(url,type);
-    const request=new chrome.cast.media.LoadRequest(mediaInfo);
-    request.autoplay=true;
 
-    return castSession.loadMedia(request);
-  }).then(()=>{
-    status.innerText="Playing on Chromecast";
-  }).catch(e=>{
-    status.innerText="Error: "+e.message;
-  });
+    if (
+      url.includes(".m3u8")
+    ) {
+
+      contentType =
+        "application/x-mpegurl";
+
+    }
+
+
+
+    const mediaInfo =
+      new chrome.cast.media.MediaInfo(
+        url,
+        contentType
+      );
+
+
+    mediaInfo.streamType =
+      chrome.cast.media.StreamType.BUFFERED;
+
+
+
+    const request =
+      new chrome.cast.media.LoadRequest(
+        mediaInfo
+      );
+
+
+    request.autoplay = true;
+
+
+
+    await castSession.loadMedia(
+      request
+    );
+
+
+    status.innerHTML =
+      "Video sent to Chromecast";
+
+
+  } catch(error) {
+
+
+    console.error(error);
+
+
+    status.innerHTML =
+      "Error: " +
+      JSON.stringify(error);
+
+
+  }
+
 }
+
+
 </script>
+
 </body>
 </html>
