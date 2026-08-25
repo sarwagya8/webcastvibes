@@ -1,32 +1,35 @@
 <!doctype html>
 <html>
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 
 <title>WebCast Vibes</title>
 
-<script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js"></script>
+<script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
 
 <style>
 body {
-  font-family: Arial, sans-serif;
+  font-family: Arial;
   padding: 20px;
-  max-width: 600px;
-  margin: auto;
 }
 
 input, button {
-  width: 100%;
-  padding: 14px;
-  margin: 8px 0;
-  font-size: 16px;
+  width:100%;
+  padding:14px;
+  margin:8px 0;
+  font-size:16px;
+}
+
+google-cast-launcher {
+  width:60px;
+  height:60px;
+  display:block;
 }
 
 #status {
-  margin-top: 20px;
-  padding: 12px;
-  border: 1px solid #aaa;
-  white-space: pre-wrap;
+  margin-top:20px;
+  border:1px solid #aaa;
+  padding:10px;
 }
 </style>
 
@@ -36,133 +39,106 @@ input, button {
 
 <h2>WebCast Vibes</h2>
 
-<input
-id="url"
-value="https://samplelib.com/mp4/sample-5s.mp4"
-placeholder="Video URL">
+<input id="url"
+value="https://samplelib.com/mp4/sample-5s.mp4">
 
+<google-cast-launcher></google-cast-launcher>
 
-<button onclick="castVideo()">
-Cast Video
-</button>
-
-
-<button onclick="disconnect()">
-Disconnect
+<button onclick="playVideo()">
+Play on Chromecast
 </button>
 
 
 <div id="status">
-Starting...
+Loading Cast...
 </div>
 
 
 <script>
 
-let session = null;
-let castReady = false;
+let castSession = null;
 
 
-function log(message) {
+window.__onGCastApiAvailable = function(isAvailable){
 
-  console.log(message);
+  if(!isAvailable){
 
-  document.getElementById("status").innerText =
-    message;
-}
-
-
-
-window.__onGCastApiAvailable = function(isAvailable) {
-
-
-  if (!isAvailable) {
-
-    log("Cast SDK failed to load");
-
+    status("Cast unavailable");
     return;
+
   }
 
 
-
-  let sessionRequest =
-    new chrome.cast.SessionRequest(
-      chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID
-    );
+  const context =
+    cast.framework.CastContext.getInstance();
 
 
+  context.setOptions({
 
-  let apiConfig =
-    new chrome.cast.ApiConfig(
+    receiverApplicationId:
+      chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
 
-      sessionRequest,
+    autoJoinPolicy:
+      chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
 
-      function(session) {
-
-        console.log(
-          "Session created",
-          session
-        );
-
-        onSessionCreated(session);
-
-      },
+  });
 
 
-      function(availability) {
 
-        console.log(
-          "Receiver availability:",
-          availability
-        );
+  context.addEventListener(
+
+    cast.framework.CastContextEventType.SESSION_STATE_CHANGED,
+
+    function(event){
 
 
-        if (
-          availability === "available"
-        ) {
+      console.log(
+        "Session state:",
+        event.sessionState
+      );
 
-          log(
-            "Chromecast found. Ready."
-          );
 
-        } else {
+      if(
+        event.sessionState ===
+        cast.framework.SessionState.SESSION_STARTED
+        ||
+        event.sessionState ===
+        cast.framework.SessionState.SESSION_RESUMED
+      ){
 
-          log(
-            "Waiting for Chromecast..."
-          );
+        castSession =
+          context.getCurrentSession();
 
-        }
+
+        document.getElementById("status")
+        .innerText =
+        "Connected";
 
       }
-    );
 
 
+      if(
+        event.sessionState ===
+        cast.framework.SessionState.SESSION_ENDED
+      ){
 
-  chrome.cast.initialize(
+        castSession=null;
 
-    apiConfig,
+        document.getElementById("status")
+        .innerText =
+        "Disconnected";
 
-    function() {
+      }
 
-      castReady = true;
-
-      log(
-        "Cast initialized"
-      );
-
-    },
-
-
-    function(error) {
-
-      log(
-        "Initialization error: " +
-        JSON.stringify(error)
-      );
 
     }
 
   );
+
+
+  document.getElementById("status")
+  .innerText =
+  "Cast ready";
 
 };
 
@@ -170,102 +146,41 @@ window.__onGCastApiAvailable = function(isAvailable) {
 
 
 
-function castVideo() {
+function playVideo(){
 
+  if(!castSession){
 
-  if (!castReady) {
-
-    log(
-      "Cast not ready yet"
-    );
+    document.getElementById("status")
+    .innerText =
+    "Connect Chromecast first";
 
     return;
 
   }
 
 
-
-  log(
-    "Opening Chromecast selector..."
-  );
-
-
-
-  chrome.cast.requestSession(
-
-    function(newSession) {
-
-      onSessionCreated(newSession);
-
-    },
-
-
-    function(error) {
-
-      console.error(error);
-
-
-      log(
-        "Session error:\n" +
-        JSON.stringify(error)
-      );
-
-    }
-
-  );
-
-}
-
-
-
-
-
-function onSessionCreated(newSession) {
-
-
-  session = newSession;
-
-
-  log(
-    "Connected. Loading video..."
-  );
-
-
-
   let url =
     document.getElementById("url")
-    .value.trim();
+    .value;
 
 
-
-  let contentType =
+  let type =
+    url.includes(".m3u8")
+    ?
+    "application/x-mpegurl"
+    :
     "video/mp4";
-
-
-
-  if (
-    url.toLowerCase()
-    .includes(".m3u8")
-  ) {
-
-    contentType =
-      "application/x-mpegurl";
-
-  }
-
 
 
   let mediaInfo =
     new chrome.cast.media.MediaInfo(
       url,
-      contentType
+      type
     );
-
 
 
   mediaInfo.streamType =
     chrome.cast.media.StreamType.BUFFERED;
-
 
 
   let request =
@@ -274,75 +189,31 @@ function onSessionCreated(newSession) {
     );
 
 
-
-  request.autoplay = true;
-
-
-
-  session.loadMedia(
-
-    request,
-
-
-    function() {
-
-      log(
-        "Playing on Chromecast"
-      );
-
-    },
-
-
-    function(error) {
-
-      log(
-        "Media error:\n" +
-        JSON.stringify(error)
-      );
-
-    }
-
-  );
-
-}
+  request.autoplay=true;
 
 
 
+  castSession.loadMedia(request)
+  .then(()=>{
 
+    document.getElementById("status")
+    .innerText =
+    "Playing";
 
-function disconnect() {
+  })
+  .catch(err=>{
 
+    document.getElementById("status")
+    .innerText =
+    "Media error: "+
+    JSON.stringify(err);
 
-  if (session) {
+  });
 
-
-    session.stop(
-
-      function() {
-
-        session = null;
-
-        log(
-          "Disconnected"
-        );
-
-      }
-
-    );
-
-
-  } else {
-
-    log(
-      "No active session"
-    );
-
-  }
 
 }
 
 </script>
-
 
 </body>
 </html>
