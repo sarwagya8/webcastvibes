@@ -1,7 +1,7 @@
 <!doctype html>
 <html>
 <head>
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 
 <title>WebCast Vibes</title>
 
@@ -9,8 +9,10 @@
 
 <style>
 body {
-  font-family: Arial;
+  font-family: Arial, sans-serif;
   padding: 20px;
+  max-width: 600px;
+  margin: auto;
 }
 
 input, button {
@@ -21,9 +23,10 @@ input, button {
 }
 
 #status {
-  margin-top:20px;
-  padding:10px;
-  border:1px solid #ccc;
+  margin-top: 20px;
+  padding: 12px;
+  border: 1px solid #aaa;
+  white-space: pre-wrap;
 }
 </style>
 
@@ -33,141 +36,236 @@ input, button {
 
 <h2>WebCast Vibes</h2>
 
-<input id="url"
-value="https://samplelib.com/mp4/sample-5s.mp4">
+<input
+id="url"
+value="https://samplelib.com/mp4/sample-5s.mp4"
+placeholder="Video URL">
+
 
 <button onclick="castVideo()">
 Cast Video
 </button>
 
+
 <button onclick="disconnect()">
 Disconnect
 </button>
 
+
 <div id="status">
-Loading...
+Starting...
 </div>
 
 
 <script>
 
 let session = null;
-let initialized = false;
+let castReady = false;
 
 
-function status(text){
-  document.getElementById("status").innerText=text;
+function log(message) {
+
+  console.log(message);
+
+  document.getElementById("status").innerText =
+    message;
 }
 
 
-window.__onGCastApiAvailable = function(isLoaded,error){
 
-  if(!isLoaded){
-    status("Cast SDK failed: "+error);
+window.__onGCastApiAvailable = function(isAvailable) {
+
+
+  if (!isAvailable) {
+
+    log("Cast SDK failed to load");
+
     return;
   }
 
 
-  const sessionRequest =
+
+  let sessionRequest =
     new chrome.cast.SessionRequest(
       chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID
     );
 
 
-  const apiConfig =
+
+  let apiConfig =
     new chrome.cast.ApiConfig(
+
       sessionRequest,
-      onSessionCreated,
-      receiverListener
+
+      function(session) {
+
+        console.log(
+          "Session created",
+          session
+        );
+
+        onSessionCreated(session);
+
+      },
+
+
+      function(availability) {
+
+        console.log(
+          "Receiver availability:",
+          availability
+        );
+
+
+        if (
+          availability === "available"
+        ) {
+
+          log(
+            "Chromecast found. Ready."
+          );
+
+        } else {
+
+          log(
+            "Waiting for Chromecast..."
+          );
+
+        }
+
+      }
     );
 
 
+
   chrome.cast.initialize(
+
     apiConfig,
-    function(){
-      initialized=true;
-      status("Cast ready");
+
+    function() {
+
+      castReady = true;
+
+      log(
+        "Cast initialized"
+      );
+
     },
-    function(error){
-      status(
-        "Init error: "+
+
+
+    function(error) {
+
+      log(
+        "Initialization error: " +
         JSON.stringify(error)
       );
+
     }
+
   );
 
 };
 
 
 
-function receiverListener(availability){
-
-  console.log(
-    "Receiver:",
-    availability
-  );
-
-}
 
 
+function castVideo() {
 
-function castVideo(){
 
-  if(!initialized){
-    status("Cast not initialized");
+  if (!castReady) {
+
+    log(
+      "Cast not ready yet"
+    );
+
     return;
+
   }
 
 
-  status(
+
+  log(
     "Opening Chromecast selector..."
   );
 
 
+
   chrome.cast.requestSession(
-    onSessionCreated,
-    function(error){
 
-      console.log(error);
+    function(newSession) {
 
-      status(
-        "Session error: "+
+      onSessionCreated(newSession);
+
+    },
+
+
+    function(error) {
+
+      console.error(error);
+
+
+      log(
+        "Session error:\n" +
         JSON.stringify(error)
       );
 
     }
+
   );
 
 }
 
 
 
-function onSessionCreated(e){
 
-  session=e;
 
-  status(
+function onSessionCreated(newSession) {
+
+
+  session = newSession;
+
+
+  log(
     "Connected. Loading video..."
   );
 
 
+
   let url =
-    document.getElementById("url").value.trim();
+    document.getElementById("url")
+    .value.trim();
 
 
-  let type =
-    url.includes(".m3u8")
-    ?
-    "application/x-mpegurl"
-    :
+
+  let contentType =
     "video/mp4";
+
+
+
+  if (
+    url.toLowerCase()
+    .includes(".m3u8")
+  ) {
+
+    contentType =
+      "application/x-mpegurl";
+
+  }
+
 
 
   let mediaInfo =
     new chrome.cast.media.MediaInfo(
       url,
-      type
+      contentType
     );
+
+
+
+  mediaInfo.streamType =
+    chrome.cast.media.StreamType.BUFFERED;
+
 
 
   let request =
@@ -176,40 +274,67 @@ function onSessionCreated(e){
     );
 
 
-  request.autoplay=true;
+
+  request.autoplay = true;
+
 
 
   session.loadMedia(
-    request,
-    function(){
 
-      status(
+    request,
+
+
+    function() {
+
+      log(
         "Playing on Chromecast"
       );
 
     },
-    function(error){
 
-      status(
-        "Media error: "+
+
+    function(error) {
+
+      log(
+        "Media error:\n" +
         JSON.stringify(error)
       );
 
     }
+
   );
 
 }
 
 
 
-function disconnect(){
 
-  if(session){
+
+function disconnect() {
+
+
+  if (session) {
+
 
     session.stop(
-      function(){
-        status("Disconnected");
+
+      function() {
+
+        session = null;
+
+        log(
+          "Disconnected"
+        );
+
       }
+
+    );
+
+
+  } else {
+
+    log(
+      "No active session"
     );
 
   }
@@ -217,6 +342,7 @@ function disconnect(){
 }
 
 </script>
+
 
 </body>
 </html>
