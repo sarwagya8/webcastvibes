@@ -1,219 +1,260 @@
 <!doctype html>
 <html>
 <head>
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 
 <title>WebCast Vibes</title>
 
-<script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
-
 <style>
+
 body {
-  font-family: Arial;
-  padding: 20px;
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 15px;
 }
 
 input, button {
-  width:100%;
-  padding:14px;
-  margin:8px 0;
-  font-size:16px;
+  width: 100%;
+  padding: 12px;
+  margin: 5px 0;
+  font-size: 16px;
 }
 
-google-cast-launcher {
-  width:60px;
-  height:60px;
-  display:block;
+iframe {
+  width: 100%;
+  height: 500px;
+  border: 1px solid #ccc;
 }
 
-#status {
-  margin-top:20px;
-  border:1px solid #aaa;
-  padding:10px;
+.video {
+  border: 1px solid #aaa;
+  padding: 10px;
+  margin: 10px 0;
+  word-break: break-all;
 }
+
 </style>
 
 </head>
+
 
 <body>
 
 <h2>WebCast Vibes</h2>
 
+
 <input id="url"
-value="https://samplelib.com/mp4/sample-5s.mp4">
+placeholder="Enter website URL"
+value="https://samplelib.com">
 
-<google-cast-launcher></google-cast-launcher>
 
-<button onclick="playVideo()">
-Play on Chromecast
+<button onclick="openSite()">
+Open Website
 </button>
 
 
-<div id="status">
-Loading Cast...
+<button onclick="scanVideos()">
+Find Videos
+</button>
+
+
+<iframe id="browser"></iframe>
+
+
+<h3>
+Detected Videos
+</h3>
+
+
+<div id="results">
+None yet
 </div>
+
 
 
 <script>
 
-let castSession = null;
 
+let currentURL = "";
 
-window.__onGCastApiAvailable = function(isAvailable){
 
-  if(!isAvailable){
 
-    status("Cast unavailable");
-    return;
+function openSite(){
 
-  }
+ let url =
+ document.getElementById("url").value.trim();
 
 
-  const context =
-    cast.framework.CastContext.getInstance();
+ if(!url.startsWith("http")){
+   url="https://"+url;
+ }
 
 
-  context.setOptions({
+ currentURL=url;
 
-    receiverApplicationId:
-      chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
 
-    autoJoinPolicy:
-      chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
+ document.getElementById("browser")
+ .src=url;
 
-  });
 
+ document.getElementById("results")
+ .innerHTML="Page loaded. Scan for videos.";
 
+}
 
-  context.addEventListener(
 
-    cast.framework.CastContextEventType.SESSION_STATE_CHANGED,
 
-    function(event){
 
 
-      console.log(
-        "Session state:",
-        event.sessionState
-      );
+function scanVideos(){
 
 
-      if(
-        event.sessionState ===
-        cast.framework.SessionState.SESSION_STARTED
-        ||
-        event.sessionState ===
-        cast.framework.SessionState.SESSION_RESUMED
-      ){
+ let iframe =
+ document.getElementById("browser");
 
-        castSession =
-          context.getCurrentSession();
 
+ let results =
+ document.getElementById("results");
 
-        document.getElementById("status")
-        .innerText =
-        "Connected";
 
-      }
+ try{
 
 
-      if(
-        event.sessionState ===
-        cast.framework.SessionState.SESSION_ENDED
-      ){
+ let doc =
+ iframe.contentDocument ||
+ iframe.contentWindow.document;
 
-        castSession=null;
 
-        document.getElementById("status")
-        .innerText =
-        "Disconnected";
 
-      }
+ let videos =
+ [];
 
 
-    }
+ // video tags
 
-  );
+ doc.querySelectorAll("video")
+ .forEach(v=>{
 
 
-  document.getElementById("status")
-  .innerText =
-  "Cast ready";
+   if(v.src)
+     videos.push(v.src);
 
-};
 
+ });
 
 
 
+ // source tags
 
-function playVideo(){
+ doc.querySelectorAll("source")
+ .forEach(s=>{
 
-  if(!castSession){
 
-    document.getElementById("status")
-    .innerText =
-    "Connect Chromecast first";
+   if(s.src)
+     videos.push(s.src);
 
-    return;
 
-  }
+ });
 
 
-  let url =
-    document.getElementById("url")
-    .value;
 
+ // search html
 
-  let type =
-    url.includes(".m3u8")
-    ?
-    "application/x-mpegurl"
-    :
-    "video/mp4";
+ let html =
+ doc.documentElement.innerHTML;
 
 
-  let mediaInfo =
-    new chrome.cast.media.MediaInfo(
-      url,
-      type
-    );
+ let matches =
+ html.match(
+ /(https?:\/\/[^"'\\s]+\\.(mp4|m3u8)[^"'\\s]*)/gi
+ );
 
 
-  mediaInfo.streamType =
-    chrome.cast.media.StreamType.BUFFERED;
+ if(matches){
 
+   videos =
+   videos.concat(matches);
 
-  let request =
-    new chrome.cast.media.LoadRequest(
-      mediaInfo
-    );
+ }
 
 
-  request.autoplay=true;
 
+ videos =
+ [...new Set(videos)];
 
 
-  castSession.loadMedia(request)
-  .then(()=>{
 
-    document.getElementById("status")
-    .innerText =
-    "Playing";
+ if(videos.length===0){
 
-  })
-  .catch(err=>{
+  results.innerHTML =
+  "No videos found";
 
-    document.getElementById("status")
-    .innerText =
-    "Media error: "+
-    JSON.stringify(err);
+  return;
 
-  });
+ }
+
+
+
+ results.innerHTML="";
+
+
+ videos.forEach(function(url,index){
+
+
+  let div =
+  document.createElement("div");
+
+
+  div.className="video";
+
+
+  div.innerHTML =
+  "<b>Video "+(index+1)+"</b><br>"+
+  url+
+  "<br><button onclick=\"castVideo('"+
+  encodeURIComponent(url)+
+  "')\">Cast</button>";
+
+
+  results.appendChild(div);
+
+
+ });
+
+
+
+ }
+
+ catch(e){
+
+
+ results.innerHTML =
+ "Cannot scan this site.<br>"+
+ "Browser security blocked access.";
+
+
+ }
+
 
 
 }
 
+
+
+
+
+function castVideo(url){
+
+ alert(
+ "Casting will be added next.\n\n"+
+ decodeURIComponent(url)
+ );
+
+}
+
+
 </script>
+
 
 </body>
 </html>
