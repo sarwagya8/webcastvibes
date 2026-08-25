@@ -1,0 +1,64 @@
+<!doctype html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Quick Video Caster v2</title>
+<script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
+<style>
+body{font-family:sans-serif;padding:20px}
+input,button{width:100%;padding:14px;margin:8px 0;font-size:16px}
+#status{margin-top:15px}
+</style>
+</head>
+<body>
+<h2>Quick Video Caster v2</h2>
+<input id="url" placeholder="Paste .m3u8 or .mp4 URL">
+<button onclick="startCast()">Cast</button>
+<div id="status"></div>
+
+<script>
+let castSession;
+
+window.__onGCastApiAvailable=function(available){
+  if(available){
+    const ctx=cast.framework.CastContext.getInstance();
+    ctx.setOptions({
+      receiverApplicationId: chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
+      autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
+    });
+    document.getElementById("status").innerText="Cast ready";
+  }
+};
+
+function startCast(){
+  const url=document.getElementById("url").value.trim();
+  const status=document.getElementById("status");
+
+  if(!url){
+    status.innerText="Enter a video URL";
+    return;
+  }
+
+  const ctx=cast.framework.CastContext.getInstance();
+
+  ctx.requestSession().then(()=>{
+    castSession=ctx.getCurrentSession();
+
+    let type=url.includes(".m3u8") ?
+      "application/x-mpegurl" :
+      "video/mp4";
+
+    const mediaInfo=new chrome.cast.media.MediaInfo(url,type);
+    const request=new chrome.cast.media.LoadRequest(mediaInfo);
+    request.autoplay=true;
+
+    return castSession.loadMedia(request);
+  }).then(()=>{
+    status.innerText="Playing on Chromecast";
+  }).catch(e=>{
+    status.innerText="Error: "+e.message;
+  });
+}
+</script>
+</body>
+</html>
